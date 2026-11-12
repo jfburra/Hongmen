@@ -826,13 +826,52 @@ $("#q").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();co
 $("#askDict").addEventListener("click",liveLookup);
 
 /* ================= BOOT ================= */
+/* ================= BOOT ================= */
 $("#statWords").textContent=DICT.length;
 renderScenes();renderFilters();renderChars();renderEntry();renderProgress();
 setStatus("","Connecting");
+
+// --- NEW GITHUB MODELS API CONNECTOR ---
+const GITHUB_TOKEN = "YOUR_GITHUB_TOKEN"; // Add your free GitHub Personal Access Token here
+
+sample = {
+  async json(prompt, options) {
+    // Format input to support both the chat history array and standalone strings (for dictionary/grading)
+    const messages = Array.isArray(prompt) ? prompt : [{ role: "user", content: prompt }];
+    
+    const response = await fetch("https://models.inference.ai.azure.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GITHUB_TOKEN}`
+      },
+      signal: options?.signal,
+      body: JSON.stringify({
+        model: "gpt-4o", // You can also change this to "claude-3.5-sonnet"
+        messages: [
+          { role: "system", content: "You are a helpful assistant. You must always output valid JSON ONLY." },
+          ...messages
+        ],
+        temperature: 0.7,
+        response_format: { type: "json_object" } // Forces the model to return the JSON your UI expects
+      })
+    });
+
+    if (!response.ok) throw { code: "upstream_error" };
+    const data = await response.json();
+    return JSON.parse(data.choices[0].message.content);
+  }
+};
+// ---------------------------------------
+
 (async()=>{
-  try{sample=window.claude?.use?await window.claude.use("sample"):null}catch{sample=null}
-  if(sample){setStatus("live","Live");renderChars();}
-  else{setStatus("","Offline");note("Live AI replies aren't available in this view. Open the page in Claude to chat.",true)}
+  if(sample){
+    setStatus("live","Live");
+    renderChars();
+    note("Connected via GitHub Models API."); // Updates the UI note at the bottom of the chat
+  } else {
+    setStatus("","Offline");
+  }
   await opening();
 })();
 </script>
