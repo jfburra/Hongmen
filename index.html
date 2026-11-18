@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hóngmén 红门</title>
 <style>img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
-<title>Hóngmén 红门</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Serif+SC:wght@700;900&display=swap">
@@ -385,7 +385,7 @@ footer .zh{color:var(--fg-dim);letter-spacing:.3em}
             <button class="send" id="sendBtn" type="submit" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
           </form>
           <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;justify-content:space-between">
-            <span class="note" id="note">Live replies use your Claude account; the first message asks for permission.</span>
+            <span class="note" id="note">The AI partner is free to use, so if it is busy, wait a moment and try again.</span>
             <div style="display:flex;gap:.4rem">
               <button class="btn btn-ghost btn-sm" id="checkBtn" type="button">Check goals</button>
               <button class="btn btn-ghost btn-sm" id="resetBtn" type="button">Restart</button>
@@ -682,7 +682,7 @@ async function startScene(id){
   await opening();
 }
 async function opening(){
-  if(!sample){addMsg({role:"ai",hanzi:scene().helpers[0]?"（AI 伙伴离线）":"",pinyin:"",english:"The live AI partner is unavailable in this view. The dictionary and scenario list still work.",tip:""});return}
+  if(!sample){addMsg({role:"ai",hanzi:scene().helpers[0]?"（AI 伙伴离线）":"",pinyin:"",english:"The AI partner isn't connected yet. The dictionary and scenario list still work.",tip:""});return}
   const el=addMsg({role:"ai",pending:"Setting the scene…"});
   const m=shown[shown.length-1];
   await ask([{role:"user",content:rulesTurn()+"\n\n"+openingTurn()}],el,m,true);
@@ -697,13 +697,13 @@ async function ask(input,el,m,isOpening){
     if(!m.hanzi){m.hanzi="……";m.english="(empty reply)"}
     fillBody(el.querySelector(".body"),m);syncHero();
     turns.push({role:"assistant",content:JSON.stringify({hanzi:m.hanzi,pinyin:m.pinyin,english:m.english,tip:m.tip})});
-    setStatus("live","Live");note("Live replies use your Claude account.");
+    setStatus("live","Live");note("The AI partner is free to use, so if it is busy, wait a moment and try again.");
   }catch(e){
     const code=e?.code||"upstream_error";
-    const copy={not_granted:"Claude access was declined for this page, so the partner can't reply. Reload to decide again.",sampling_disabled:"Claude isn't available on this account.",rate_limited:"Too many messages for now. Wait a minute and try again.",refused:"That message couldn't be answered. Try phrasing it differently.",invalid_json:"The reply came back garbled. Send again.",cancelled:"Stopped.",session_expired:"Please sign in again to keep chatting."}[code]||"Connection hiccup. Send again.";
+    const copy={rate_limited:"The free daily message limit may have been reached, or the partner is busy. Wait a minute and try again, or come back tomorrow.",invalid_json:"The reply came back garbled. Send again.",cancelled:"Stopped.",not_configured:"The AI partner isn't connected yet."}[code]||"Connection hiccup. Send again.";
     Object.assign(m,{pending:null,hanzi:"",english:copy});
     el.querySelector(".body").innerHTML=`<div class="en" style="color:var(--red-hi)">${esc(copy)}</div>`;syncHero();
-    if(code==="not_granted"||code==="sampling_disabled"){setStatus("","Offline")}else setStatus("live","Live");
+    setStatus("live","Live");
     if(code!=="cancelled")note(copy,true);
     if(!isOpening){turns.pop()}
   }finally{busy=false;$("#sendBtn").disabled=false;$("#msgs").scrollTop=$("#msgs").scrollHeight}
@@ -769,13 +769,13 @@ Reply with ONLY a JSON object: {"goals":[true,false,...] (one boolean per goal, 
     addMsg({role:"ai",hanzi:cleared?"太棒了！挑战完成。":`目前完成了 ${n}/${s.goals.length} 个目标。`,pinyin:cleared?"Tài bàng le! Tiǎozhàn wánchéng.":"",english:String(r?.feedback||""),tip:""});
     if(cleared)toast(`Scene cleared · +${s.xp} XP`);
     setStatus("live","Live");
-  }catch(e){toast(e?.code==="not_granted"?"Claude access was declined":"Couldn't grade right now");setStatus("live","Live")}
+  }catch(e){toast(e?.code==="rate_limited"?"Free limit reached for now, try again later":"Couldn't grade right now");setStatus("live","Live")}
   finally{busy=false;$("#checkBtn").disabled=false}
 });
 
 /* ================= DICTIONARY ================= */
 let tag="all",selected=DICT[0],lastQuery="";
-function norm(s){return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[\s'’]/g,"").replace(/ü/g,"v")}
+function norm(s){return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[\s'’]/g,"").replace(/ü/g,"v")}
 function renderFilters(){
   $("#filters").innerHTML=`<button class="chip" data-t="all" aria-pressed="${tag==="all"}">All</button>`+Object.entries(TAGS).map(([k,v])=>`<button class="chip" data-t="${k}" aria-pressed="${tag===k}">${v}</button>`).join("");
   $("#filters").querySelectorAll(".chip").forEach(c=>c.addEventListener("click",()=>{tag=c.dataset.t;renderFilters();renderChars()}));
@@ -818,7 +818,7 @@ async function liveLookup(){
     selected={c:String(r.hanzi),p:String(r.pinyin||""),m:String(r.meaning||""),ex:String(r.example||""),exp:String(r.examplePinyin||""),exe:String(r.exampleEnglish||""),note:String(r.note||""),live:true};
     renderEntry();toast("Looked up "+selected.c);
     if(matchMedia("(max-width:720px)").matches)$("#entry").scrollIntoView({behavior:"smooth",block:"nearest"});
-  }catch(e){toast(e?.code==="not_granted"?"Claude access was declined":"Couldn't look that up right now")}
+  }catch(e){toast(e?.code==="rate_limited"?"Free limit reached for now, try again later":"Couldn't look that up right now")}
   finally{btns.forEach(b=>{b.disabled=false;b.textContent="Look up live"})}
 }
 $("#q").addEventListener("input",renderChars);
@@ -826,49 +826,56 @@ $("#q").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();co
 $("#askDict").addEventListener("click",liveLookup);
 
 /* ================= BOOT ================= */
-/* ================= BOOT ================= */
 $("#statWords").textContent=DICT.length;
 renderScenes();renderFilters();renderChars();renderEntry();renderProgress();
 setStatus("","Connecting");
 
-// --- NEW GITHUB MODELS API CONNECTOR ---
-const GITHUB_TOKEN = "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"; // Add your free GitHub Personal Access Token here
+/* ================= CHATBOT CONNECTION =================
+   The page never holds a secret key. It sends messages to YOUR Cloudflare Worker,
+   which holds the Groq key privately and returns the reply.
 
-sample = {
-  async json(prompt, options) {
-    // Format input to support both the chat history array and standalone strings (for dictionary/grading)
-    const messages = Array.isArray(prompt) ? prompt : [{ role: "user", content: prompt }];
-    
-    const response = await fetch("https://models.inference.ai.azure.com/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${GITHUB_TOKEN}`
-      },
-      signal: options?.signal,
-      body: JSON.stringify({
-        model: "gpt-4o", // You can also change this to "claude-3.5-sonnet"
-        messages: [
-          { role: "system", content: "You are a helpful assistant. You must always output valid JSON ONLY." },
-          ...messages
-        ],
-        temperature: 0.7,
-        response_format: { type: "json_object" } // Forces the model to return the JSON your UI expects
-      })
-    });
+   >>> The ONE thing to edit: replace the text between the quotes below with
+   >>> your Worker's address (it looks like https://something.yourname.workers.dev)
+*/
+const WORKER_URL = "https://hongmen-chat.john-burras.workers.dev/";
 
-    if (!response.ok) throw { code: "upstream_error" };
-    const data = await response.json();
-    return JSON.parse(data.choices[0].message.content);
-  }
-};
-// ---------------------------------------
+if (WORKER_URL && !WORKER_URL.includes("https://hongmen-chat.john-burras.workers.dev/")) {
+  sample = {
+    async json(prompt, options) {
+      // Accepts a chat history (array) or a single text prompt (dictionary / grading)
+      const messages = Array.isArray(prompt) ? prompt : [{ role: "user", content: prompt }];
+
+      let response;
+      try {
+        response = await fetch(WORKER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: options?.signal,
+          body: JSON.stringify({ messages })
+        });
+      } catch (e) {
+        if (e && e.name === "AbortError") throw { code: "cancelled" };
+        throw { code: "upstream_error" };
+      }
+
+      if (response.status === 429) throw { code: "rate_limited" };
+      if (!response.ok) throw { code: "upstream_error" };
+
+      let data;
+      try { data = await response.json(); } catch { throw { code: "upstream_error" }; }
+      try {
+        return JSON.parse(data.content);
+      } catch {
+        throw { code: "invalid_json" };
+      }
+    }
+  };
+}
 
 (async()=>{
   if(sample){
     setStatus("live","Live");
     renderChars();
-    note("Connected via GitHub Models API."); // Updates the UI note at the bottom of the chat
   } else {
     setStatus("","Offline");
   }
