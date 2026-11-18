@@ -839,7 +839,7 @@ setStatus("","Connecting");
 */
 const WORKER_URL = "https://hongmen-chat.john-burras.workers.dev/";
 
-if (WORKER_URL && !WORKER_URL.includes("https://hongmen-chat.john-burras.workers.dev/")) {
+if (WORKER_URL && !WORKER_URL.includes("PASTE_YOUR_WORKER_URL_HERE")) {
   sample = {
     async json(prompt, options) {
       // Accepts a chat history (array) or a single text prompt (dictionary / grading)
@@ -871,7 +871,6 @@ if (WORKER_URL && !WORKER_URL.includes("https://hongmen-chat.john-burras.workers
     }
   };
 }
-
 (async()=>{
   if(sample){
     setStatus("live","Live");
