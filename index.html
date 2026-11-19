@@ -109,7 +109,10 @@ p{margin:0}
 .console .bar input:focus{outline:none}
 .console .bar input::placeholder{color:var(--fg-mute)}
 .console .bar .send{flex:none;width:32px;height:32px;border-radius:50%;background:var(--red);border:none;display:grid;place-items:center;color:#fff;box-shadow:0 4px 14px rgba(232,35,46,.4)}
-#heroLines{display:grid;gap:.9rem}
+#heroLines{display:grid;gap:.9rem;max-height:min(46vh,380px);overflow-y:auto;padding-right:.3rem;scroll-behavior:smooth;align-content:start}
+#heroLines.no-py .py{display:none}
+#heroLines.no-en .en{display:none}
+.free-foot{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap}
 #heroLines .demo-line .tip{font-size:.78rem;color:var(--gold);margin-top:.2rem}
 .console .bar .send svg{width:14px;height:14px;fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 .stats{display:flex;flex-wrap:wrap;justify-content:center;gap:2.5rem 3.5rem;margin-top:.5rem}
@@ -329,12 +332,9 @@ footer .zh{color:var(--fg-dim);letter-spacing:.3em}
     <div class="console">
       <div class="core" aria-hidden="true">说</div>
       <div class="screen">
-        <div id="heroLines" aria-live="polite">
-          <div class="demo-line ai"><div class="who">AI</div><div class="bubble"><div class="hz">欢迎光临！几位？</div><div class="py">Huānyíng guānglín! Jǐ wèi?</div><div class="en">Welcome! How many people?</div></div></div>
-          <div class="demo-line"><div class="who">YOU</div><div class="bubble"><div class="hz">两个人。有没有不辣的面？</div><div class="py">Liǎng gè rén. Yǒu méiyǒu bú là de miàn?</div></div></div>
-          <div class="demo-line ai"><div class="who">AI</div><div class="bubble"><div class="hz">有，番茄鸡蛋面不辣，很受欢迎。</div><div class="py">Yǒu, fānqié jīdàn miàn bú là, hěn shòu huānyíng.</div><div class="en">Yes, tomato-egg noodles aren't spicy and are very popular.</div></div></div>
-        </div>
+        <div id="heroLines" aria-live="polite"></div>
         <form class="bar" id="heroForm"><input id="heroInput" placeholder="Type your reply in Chinese or pinyin…" aria-label="Your message" autocomplete="off"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></form>
+        <div class="free-foot"><span class="note">Free chat: talk about anything. It is separate from the scenario chats below.</span><button class="btn btn-ghost btn-sm" id="freeReset" type="button">Start over</button></div>
       </div>
     </div>
 
@@ -621,13 +621,68 @@ function openingTurn(){
 }
 
 /* ================= RENDER ================= */
-function addMsg(m){shown.push(m);const el=renderMsg(m);$("#msgs").appendChild(el);$("#msgs").scrollTop=$("#msgs").scrollHeight;syncHero();return el}
-function syncHero(){
-  const last=shown.slice(-3);if(!last.length)return;
-  $("#heroLines").innerHTML=last.map(m=>{
-    const who=m.role==="ai"?"AI":"YOU";
-    let b=m.pending?`<div class="en">${esc(m.pending)}</div>`:`<div class="hz" lang="zh">${esc(m.hanzi)}</div>${m.pinyin?`<div class="py">${esc(m.pinyin)}</div>`:""}${m.english?`<div class="en">${esc(m.english)}</div>`:""}${m.tip&&showTips?`<div class="tip">Tip · ${esc(m.tip)}</div>`:""}`;
-    return `<div class="demo-line ${m.role==="ai"?"ai":""}"><div class="who">${who}</div><div class="bubble">${b}</div></div>`}).join("");
+function addMsg(m){shown.push(m);const el=renderMsg(m);$("#msgs").appendChild(el);$("#msgs").scrollTop=$("#msgs").scrollHeight;return el}
+/* ================= FREE CHAT (top box): its own conversation, separate from scenarios ================= */
+const FREE_GREETING={role:"ai",hanzi:"你好！我是小红，你的中文聊天伙伴。我们随便聊聊吧，你今天怎么样？",pinyin:"Nǐ hǎo! Wǒ shì Xiǎohóng, nǐ de Zhōngwén liáotiān huǒbàn. Wǒmen suíbiàn liáoliao ba, nǐ jīntiān zěnmeyàng?",english:"Hi! I'm Xiaohong, your Chinese chat partner. Let's just chat. How are you today?",tip:""};
+const freeGreetingTurn=()=>({role:"assistant",content:JSON.stringify({hanzi:FREE_GREETING.hanzi,pinyin:FREE_GREETING.pinyin,english:FREE_GREETING.english,tip:""})});
+let freeShown=[FREE_GREETING], freeTurns=[freeGreetingTurn()], freeBusy=false, freeCtl=null, freeGen=0;
+
+function freeRulesTurn(){
+  return `You are 小红, a friendly, curious Mandarin conversation partner inside a language-learning app. This is FREE CHAT: there is no scene and no role-play. Chat naturally about anything the learner brings up (daily life, hobbies, food, travel, school, culture, opinions, or learning Chinese itself). If they ask about a Chinese word or grammar point, explain it briefly, then return to the conversation.
+${levelRules()}
+
+The learner may write in 汉字, pinyin, or a mix (sometimes with English words). Understand it charitably.
+If the learner makes a grammar, word-choice or tone error, add a short, kind correction in "tip" (English, one or two sentences, show the corrected Chinese). If their message was fine, set "tip" to an empty string. If they write in English only, gently encourage Chinese in the tip but still reply (mostly in Chinese).
+Always end your reply with a question or comment that keeps the conversation going.
+
+Reply with ONLY a JSON object, no other text:
+{"hanzi":"<your reply in simplified Chinese>","pinyin":"<the same reply in pinyin with tone marks>","english":"<natural English translation>","tip":"<correction or empty string>"}`;
+}
+function freeBodyHTML(m){
+  if(m.pending)return `<div class="en">${esc(m.pending)}</div>`;
+  if(m.err)return `<div class="en" style="color:var(--red-hi)">${esc(m.err)}</div>`;
+  return `<div class="hz" lang="zh">${esc(m.hanzi)}</div>${m.pinyin?`<div class="py">${esc(m.pinyin)}</div>`:""}${m.english?`<div class="en">${esc(m.english)}</div>`:""}${m.tip&&showTips?`<div class="tip">Tip · ${esc(m.tip)}</div>`:""}`;
+}
+function renderFree(){
+  const box=$("#heroLines");
+  box.innerHTML=freeShown.map(m=>`<div class="demo-line ${m.role==="ai"?"ai":""}"><div class="who">${m.role==="ai"?"AI":"YOU"}</div><div class="bubble">${freeBodyHTML(m)}</div></div>`).join("");
+  box.scrollTop=box.scrollHeight;
+}
+async function sendFree(text){
+  text=(text||"").trim();if(!text)return;
+  if(freeBusy){toast("Wait for the partner to finish");return}
+  if(!sample){toast("AI partner is unavailable right now");return}
+  const gen=freeGen;
+  const btn=$("#heroForm button");
+  freeShown.push({role:"user",hanzi:text});
+  freeTurns.push({role:"user",content:text});
+  const m={role:"ai",pending:"Thinking…"};
+  freeShown.push(m);renderFree();
+  freeBusy=true;btn.disabled=true;
+  freeCtl=new AbortController();
+  try{
+    const data=await sample.json([{role:"user",content:freeRulesTurn()},...freeTurns.slice(-16)],{cache:false,signal:freeCtl.signal,modelTier:"quick"});
+    if(gen!==freeGen)return;
+    const r=(data&&typeof data==="object")?data:{};
+    Object.assign(m,{pending:null,hanzi:String(r.hanzi||""),pinyin:String(r.pinyin||""),english:String(r.english||""),tip:String(r.tip||"")});
+    if(!m.hanzi){m.hanzi="……";m.english="(empty reply)"}
+    freeTurns.push({role:"assistant",content:JSON.stringify({hanzi:m.hanzi,pinyin:m.pinyin,english:m.english,tip:m.tip})});
+  }catch(e){
+    if(gen!==freeGen)return;
+    const code=e?.code||"upstream_error";
+    const copy={rate_limited:"The free daily message limit may have been reached, or the partner is busy. Wait a minute and try again, or come back tomorrow.",invalid_json:"The reply came back garbled. Send again.",cancelled:"Stopped."}[code]||"Connection hiccup. Send again.";
+    Object.assign(m,{pending:null,err:copy});
+    freeTurns.pop();
+  }finally{
+    freeBusy=false;btn.disabled=false;
+    if(gen===freeGen)renderFree();
+  }
+}
+function resetFree(){
+  if(freeBusy&&freeCtl)freeCtl.abort();
+  freeGen++;freeBusy=false;$("#heroForm button").disabled=false;
+  freeShown=[FREE_GREETING];freeTurns=[freeGreetingTurn()];
+  renderFree();
 }
 function renderMsg(m){
   const d=document.createElement("div");d.className="msg "+m.role;
@@ -695,14 +750,14 @@ async function ask(input,el,m,isOpening){
     const r=(data&&typeof data==="object")?data:{};
     Object.assign(m,{pending:null,hanzi:String(r.hanzi||""),pinyin:String(r.pinyin||""),english:String(r.english||""),tip:String(r.tip||"")});
     if(!m.hanzi){m.hanzi="……";m.english="(empty reply)"}
-    fillBody(el.querySelector(".body"),m);syncHero();
+    fillBody(el.querySelector(".body"),m);
     turns.push({role:"assistant",content:JSON.stringify({hanzi:m.hanzi,pinyin:m.pinyin,english:m.english,tip:m.tip})});
     setStatus("live","Live");note("The AI partner is free to use, so if it is busy, wait a moment and try again.");
   }catch(e){
     const code=e?.code||"upstream_error";
     const copy={rate_limited:"The free daily message limit may have been reached, or the partner is busy. Wait a minute and try again, or come back tomorrow.",invalid_json:"The reply came back garbled. Send again.",cancelled:"Stopped.",not_configured:"The AI partner isn't connected yet."}[code]||"Connection hiccup. Send again.";
     Object.assign(m,{pending:null,hanzi:"",english:copy});
-    el.querySelector(".body").innerHTML=`<div class="en" style="color:var(--red-hi)">${esc(copy)}</div>`;syncHero();
+    el.querySelector(".body").innerHTML=`<div class="en" style="color:var(--red-hi)">${esc(copy)}</div>`;
     setStatus("live","Live");
     if(code!=="cancelled")note(copy,true);
     if(!isOpening){turns.pop()}
@@ -726,19 +781,20 @@ $("#form").addEventListener("submit",e=>{
   e.preventDefault();const i=$("#input");const t=i.value;i.value="";autosize();send(t);
 });
 $("#heroForm").addEventListener("submit",e=>{
-  e.preventDefault();const i=$("#heroInput");const t=i.value;i.value="";send(t);
+  e.preventDefault();const i=$("#heroInput");const t=i.value;i.value="";sendFree(t);
 });
 const input=$("#input");
 function autosize(){input.style.height="auto";input.style.height=Math.min(140,input.scrollHeight)+"px"}
 input.addEventListener("input",autosize);
 input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("#form").requestSubmit()}});
 $("#resetBtn").addEventListener("click",()=>startScene(sceneId));
+$("#freeReset").addEventListener("click",resetFree);
 
 // toggles
 function bindToggle(id,fn){const b=$(id);b.addEventListener("click",()=>{const on=b.getAttribute("aria-pressed")!=="true";b.setAttribute("aria-pressed",on);fn(on)})}
-bindToggle("#togPy",on=>$("#chatBox").classList.toggle("no-py",!on));
-bindToggle("#togEn",on=>$("#chatBox").classList.toggle("no-en",!on));
-bindToggle("#togTips",on=>{showTips=on;$("#msgs").innerHTML="";shown.forEach(m=>$("#msgs").appendChild(renderMsg(m)))});
+bindToggle("#togPy",on=>{$("#chatBox").classList.toggle("no-py",!on);$("#heroLines").classList.toggle("no-py",!on)});
+bindToggle("#togEn",on=>{$("#chatBox").classList.toggle("no-en",!on);$("#heroLines").classList.toggle("no-en",!on)});
+bindToggle("#togTips",on=>{showTips=on;$("#msgs").innerHTML="";shown.forEach(m=>$("#msgs").appendChild(renderMsg(m)));renderFree()});
 
 // goal check
 $("#checkBtn").addEventListener("click",async()=>{
@@ -827,7 +883,7 @@ $("#askDict").addEventListener("click",liveLookup);
 
 /* ================= BOOT ================= */
 $("#statWords").textContent=DICT.length;
-renderScenes();renderFilters();renderChars();renderEntry();renderProgress();
+renderScenes();renderFilters();renderChars();renderEntry();renderProgress();renderFree();
 setStatus("","Connecting");
 
 /* ================= CHATBOT CONNECTION =================
@@ -871,6 +927,7 @@ if (WORKER_URL && !WORKER_URL.includes("PASTE_YOUR_WORKER_URL_HERE")) {
     }
   };
 }
+
 (async()=>{
   if(sample){
     setStatus("live","Live");
